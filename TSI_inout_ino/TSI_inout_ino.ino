@@ -26,9 +26,13 @@ Example sketches from Arduino team, Ethernet by Adrian McEwen
 
 #include <SPI.h>
 #include <Ethernet.h>
+#include <EthernetUdp.h>
 
 // Local Network Settings
 byte mac[] = { 0xD4, 0x28, 0xB2, 0xFF, 0xA0, 0xA1 }; // Must be unique on local network
+
+unsigned int localPort = 8888;      // local port to listen for UDP packets
+
 
 // ThingSpeak Settings
 char thingSpeakAddress[] = "api.thingspeak.com";
@@ -39,6 +43,20 @@ long lastConnectionTime = 0;
 boolean lastConnected = false;
 int failedCounter = 0;
 
+// NTP stuff
+//IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov NTP server
+IPAddress timeServer(193,170,62,252); // ana austrian one
+// IPAddress timeServer(132, 163, 4, 102); // time-b.timefreq.bldrdoc.gov NTP server
+// IPAddress timeServer(132, 163, 4, 103); // time-c.timefreq.bldrdoc.gov NTP server
+
+const int NTP_PACKET_SIZE= 48; // NTP time stamp is in the first 48 bytes of the message
+
+byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
+
+// A UDP instance to let us send and receive packets over UDP
+EthernetUDP Udp;
+
+
 // Initialize Arduino Ethernet Client
 EthernetClient client;
 
@@ -48,7 +66,7 @@ int hsopen =-1;
 int ethernetstatus = -1;
 
 //debug options
-boolean debug = false;
+boolean debug = true;
 const int ropen=5;
 const int rwait=6;
 const int rclosed=7;
@@ -88,7 +106,7 @@ void setup()
   // Start Ethernet on Arduino
   setEth(-1);
   startEthernet();
-  
+
   delay(1000);
   
   setRoom(hsopen); 
@@ -99,7 +117,7 @@ void loop()
 {
   if((digitalRead(topen)==LOW)&&(hsopen!=1)){
     setRoom(2);
-    if(updateTwitterStatus("Hackerspace @ Freies Theater: OPENING ---")==0){
+    if(updateTwitterStatus("Hackerspace @ Freies Theater: OPENING at " + read_time())==0){
       hsopen=1;
     }
     else
@@ -111,7 +129,7 @@ void loop()
   }
   if((digitalRead(tclose)==LOW)&&(hsopen!=0)){
     setRoom(2);
-    if(updateTwitterStatus("Hackerspace @ Freies Theater: CLOSING ---")==0){
+    if(updateTwitterStatus("Hackerspace @ Freies Theater: CLOSING at " + read_time())==0){
       hsopen=0;
     }
     else
@@ -219,6 +237,7 @@ void startEthernet()
       Serial.println("Arduino connected to network using DHCP");
       Serial.println();
     }
+    Udp.begin(localPort);
     setEth(1);
   }
   
@@ -245,3 +264,90 @@ void setRoom(int statuss){
   digitalWrite(rclosed,((statuss==0)?HIGH:LOW));
   digitalWrite(runknown,((statuss==-1)?HIGH:LOW));
 }
+
+//NTP Functions: Read the Time from NTP Server
+String read_time(){
+  String time= "";
+  Serial.println("readTime");
+  sendNTPpacket(timeServer); // send an NTP packet to a time server
+
+    // wait to see if a reply is available
+  for(int i = 50; i>0;i--){
+    if(debug){
+      Serial.print("iteration ");
+      Serial.println(i);
+    }
+    delay(50);  
+    if ( Udp.parsePacket() ) {  
+      // We've received a packet, read the data from it
+      Udp.read(packetBuffer,NTP_PACKET_SIZE);  // read the packet into the buffer
+  
+      //the timestamp starts at byte 40 of the received packet and is four bytes,
+      // or two words, long. First, esxtract the two words:
+  
+      unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
+      unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);  
+      // combine the four bytes (two words) into a long integer
+      // this is NTP time (seconds since Jan 1 1900):
+      unsigned long secsSince1900 = highWord << 16 | lowWord;  
+      if(debug){
+        Serial.print("Seconds since Jan 1 1900 = " );
+        Serial.println(secsSince1900);              
+    
+        // now convert NTP time into everyday time:
+        Serial.print("Unix time = ");
+      }
+      // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
+      const unsigned long seventyYears = 2208988800UL;    
+      // subtract seventy years:
+      unsigned long epoch = secsSince1900 - seventyYears;  
+      // print Unix time:
+      if(debug){
+        Serial.println(epoch);                              
+      }   
+      //time +="The UTC time is ";       // UTC is the time at Greenwich Meridian (GMT)
+      time +=((epoch + 3600)  % 86400L) / 3600; // print the hour (86400 equals secs per day)
+      time +=':';
+               
+      if ( ((epoch % 3600) / 60) < 10 ) {
+        // In the first 10 minutes of each hour, we'll want a leading '0'
+        time +="0";          
+      }
+      time +=((epoch  % 3600) / 60); // print the minute (3600 equals secs per minute)
+      time +=':';
+      
+      if ( (epoch % 60) < 10 ) {
+        // In the first 10 seconds of each minute, we'll want a leading '0'
+        time +="0";
+      }
+      time+=epoch %60;
+      if(debug){Serial.println(time);}     
+      return(time);
+    }
+  }
+}
+
+// send an NTP request to the time server at the given address
+unsigned long sendNTPpacket(IPAddress& address)
+{
+  // set all bytes in the buffer to 0
+  memset(packetBuffer, 0, NTP_PACKET_SIZE);
+  // Initialize values needed to form NTP request
+  // (see URL above for details on the packets)
+  packetBuffer[0] = 0b11100011;   // LI, Version, Mode
+  packetBuffer[1] = 0;     // Stratum, or type of clock
+  packetBuffer[2] = 6;     // Polling Interval
+  packetBuffer[3] = 0xEC;  // Peer Clock Precision
+  // 8 bytes of zero for Root Delay & Root Dispersion
+  packetBuffer[12]  = 49;
+  packetBuffer[13]  = 0x4E;
+  packetBuffer[14]  = 49;
+  packetBuffer[15]  = 52;
+
+  // all NTP fields have been given values, now
+  // you can send a packet requesting a timestamp:         
+  Udp.beginPacket(address, 123); //NTP requests are to port 123
+  Udp.write(packetBuffer,NTP_PACKET_SIZE);
+  Udp.endPacket();
+}
+
