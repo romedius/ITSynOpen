@@ -268,7 +268,9 @@ void setRoom(int statuss){
 //NTP Functions: Read the Time from NTP Server
 String read_time(){
   String time= "";
-  Serial.println("readTime");
+  if(debug){
+    Serial.println("readTime");
+  }
   sendNTPpacket(timeServer); // send an NTP packet to a time server
 
     // wait to see if a reply is available
