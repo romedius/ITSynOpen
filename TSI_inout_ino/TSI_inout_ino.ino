@@ -38,9 +38,9 @@ unsigned int localPort = 8888;      // local port to listen for UDP packets
 char thingSpeakAddress[] = "api.thingspeak.com";
 String thingtweetAPIKey = "21I4R9UJQZJSC60Y";
 
-// Variable Setup
+// Variable Setup - check if these Variables are needed
 long lastConnectionTime = 0;
-boolean lastConnected = false;
+boolean lastConnected = true;
 int failedCounter = 0;
 
 // NTP stuff
@@ -56,17 +56,34 @@ byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing pack
 // A UDP instance to let us send and receive packets over UDP
 EthernetUDP Udp;
 
-
 // Initialize Arduino Ethernet Client
 EthernetClient client;
 
+// Twitter response variables
+char serverName[] = "api.twitter.com";  // twitter URL
+String currentLine = "";            // string to hold the text from server
+String tweet = "";                  // string to hold the tweet
+boolean readingTweet = false;       // if you're currently reading the tweet
+
+
 // Specific variables
 // Status
-int hsopen =-1;
+int hsopen =2;
 int ethernetstatus = -1;
+/*
+0=not set
+1=read thingspeak response
+2=read tweet
+*/
+int readStatus=0;
+
+// Twitter message, intermediate part
+String tmsg = " Hackerspace @ Freies Theater at ";
 
 //debug options
-boolean debug = true;
+boolean debug = false;
+
+//LED and Switch pins
 const int ropen=5;
 const int rwait=6;
 const int rclosed=7;
@@ -105,60 +122,38 @@ void setup()
   }
   // Start Ethernet on Arduino
   setEth(-1);
+  setRoom(hsopen); 
   startEthernet();
 
   delay(1000);
   
-  setRoom(hsopen); 
   // Update Twitter via ThingTweet
+  TriggerTwitterReq();
 }
 
 void loop()
 {
-  if((digitalRead(topen)==LOW)&&(hsopen!=1)){
-    setRoom(2);
-    if(updateTwitterStatus("Hackerspace @ Freies Theater: OPENING at " + read_time())==0){
-      hsopen=1;
+  switch(readStatus){
+    case 0:{
+      readStatus = readButtons();
+      break;
     }
-    else
-    {
-      hsopen=-1;
+    case 1:{
+      readStatus = readThingspeakResponse();
+      break;
     }
-    delay(3000);  
-    setRoom(hsopen);  
-  }
-  if((digitalRead(tclose)==LOW)&&(hsopen!=0)){
-    setRoom(2);
-    if(updateTwitterStatus("Hackerspace @ Freies Theater: CLOSING at " + read_time())==0){
-      hsopen=0;
-    }
-    else
-    {
-      hsopen=-1;
-    }
-    delay(3000);
-    setRoom(hsopen);  
-  }
-// Print Update Response to Serial Monitor
-  if(client.available())
-  {
-    char c = client.read();
-    if(debug){
-      Serial.print(c);
+    case 2:{
+      readStatus = readTwitterStatus();
+      break;
     }
   }
-
-  // Disconnect from ThingSpeak
-  if (!client.connected() && lastConnected)
-  {
-    if(debug){
-      Serial.println("...disconnected");
-    }
-    client.stop();
-  }
-    
+  
+  
+  
   // Check if Arduino Ethernet needs to be restarted
-  if (failedCounter > 3 ) {startEthernet();}
+  if (failedCounter > 3 ) {
+    startEthernet();
+  }
   lastConnected = client.connected();
 }
 
@@ -212,6 +207,59 @@ int updateTwitterStatus(String tsData)
   }
 }
 
+int readButtons(){
+  int ret=0;
+  if((digitalRead(topen)==LOW)&&(hsopen!=1)){
+    setRoom(2);
+    if(updateTwitterStatus("Opening" + tmsg + read_time())==0){
+      hsopen=1;
+      ret=1;
+    }
+    else
+    {
+      hsopen=-1;
+    }
+    delay(3000);  
+    setRoom(hsopen);  
+  }
+  if((digitalRead(tclose)==LOW)&&(hsopen!=0)){
+    setRoom(2);
+    if(updateTwitterStatus("Closing" + tmsg + read_time())==0){
+      hsopen=0;
+      ret=1;
+    }
+    else
+    {
+      hsopen=-1;
+    }
+    delay(3000);
+    setRoom(hsopen);
+  }
+  return ret; 
+}
+
+int readThingspeakResponse(){
+// Print Update Response to Serial Monitor
+  if(client.available())
+  {
+    char c = client.read();
+    if(debug){
+      Serial.print(c);
+    }
+  }
+
+  // Disconnect from ThingSpeak
+  if (!client.connected() && lastConnected)
+  {
+    if(debug){
+      Serial.println("...disconnected");
+    }
+    client.stop();
+    return 0;
+  }
+  return 1;
+}
+
 void startEthernet()
 {
   client.stop();
@@ -246,8 +294,8 @@ void startEthernet()
 
 void setEth(int statuss){
   if(debug){
-  Serial.println("Setting eth ");
-  Serial.println(statuss);
+    Serial.println("Setting eth ");
+    Serial.println(statuss);
   }
   digitalWrite(eok,((statuss==1)?HIGH:LOW));
   digitalWrite(efail,((statuss==0)?HIGH:LOW));
@@ -256,8 +304,8 @@ void setEth(int statuss){
 
 void setRoom(int statuss){
   if(debug){
-  Serial.println("Setting room ");
-  Serial.println(statuss);
+    Serial.println("Setting room ");
+    Serial.println(statuss);
   }
   digitalWrite(ropen,((statuss==1)?HIGH:LOW));
   digitalWrite(rwait,((statuss==2)?HIGH:LOW));
@@ -351,5 +399,73 @@ unsigned long sendNTPpacket(IPAddress& address)
   Udp.beginPacket(address, 123); //NTP requests are to port 123
   Udp.write(packetBuffer,NTP_PACKET_SIZE);
   Udp.endPacket();
+}
+
+/**
+* http://arduino.cc/en/Tutorial/TwitterClient
+*
+*
+*/
+void TriggerTwitterReq() {
+  // attempt to connect, and wait a millisecond:
+  if(debug){Serial.println("connecting to server...");}
+  if (client.connect(serverName, 80)) {
+    if(debug){Serial.println("making HTTP request...");}
+    // make HTTP GET request to twitter:
+    client.println("GET /1/statuses/user_timeline.xml?screen_name=ITSynOpen&count=1 HTTP/1.1");
+    client.println("HOST: api.twitter.com");
+    client.println();
+  }
+  // note the time of this connect attempt:
+  readStatus=2;
+}
+
+int readTwitterStatus() {
+ if (client.connected()) {
+    if (client.available()) {
+      // read incoming bytes:
+      char inChar = client.read();
+
+      // add incoming byte to end of line:
+      currentLine += inChar;
+
+      // if you get a newline, clear the line:
+      if (inChar == '\n') {
+        currentLine = "";
+      }
+      // if the current line ends with <text>, it will
+      // be followed by the tweet:
+      if ( currentLine.endsWith("<text>")) {
+        // tweet is beginning. Clear the tweet string:
+        readingTweet = true;
+        tweet = "";
+      }
+      // if you're currently reading the bytes of a tweet,
+      // add them to the tweet String:
+      if (readingTweet) {
+        if (inChar != '<') {
+          tweet += inChar;
+        }
+        else {
+          // if you got a "<" character,
+          // you've reached the end of the tweet:
+          readingTweet = false;
+
+          if(debug){Serial.println("Tweet:");}  
+          if(debug){Serial.println(tweet);}
+          if(debug){Serial.println(tweet.startsWith("Opening", 1));}          
+          if(debug){Serial.println(tweet.startsWith("Closing", 1));}
+          if(tweet.startsWith("Opening", 1)){hsopen=1;}
+          else if(tweet.startsWith("Closing", 1)){hsopen=0;}
+          else {hsopen=-1;}
+          setRoom(hsopen);
+          // close the connection to the server:
+          client.stop();
+          return 0;
+        }
+      }
+    }  
+  }
+  return 2;
 }
 
