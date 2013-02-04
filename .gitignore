@@ -15,3 +15,7 @@
 *.exe
 *.out
 *.app
+
+#other
+TSI_inout_ino/APIKey.h
+*~

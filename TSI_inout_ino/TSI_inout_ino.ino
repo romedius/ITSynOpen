@@ -28,6 +28,8 @@ Example sketches from Arduino team, Ethernet by Adrian McEwen
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 
+#include "APIKey.h"
+
 // Local Network Settings
 byte mac[] = { 0xD4, 0x28, 0xB2, 0xFF, 0xA0, 0xA1 }; // Must be unique on local network
 
@@ -36,7 +38,6 @@ unsigned int localPort = 8888;      // local port to listen for UDP packets
 
 // ThingSpeak Settings
 char thingSpeakAddress[] = "api.thingspeak.com";
-String thingtweetAPIKey = "21I4R9UJQZJSC60Y";
 
 // Variable Setup - check if these Variables are needed
 long lastConnectionTime = 0;
@@ -78,7 +79,7 @@ int ethernetstatus = -1;
 int readStatus=0;
 
 // Twitter message, intermediate part
-String tmsg = " Hackerspace @ Freies Theater at ";
+String tmsg = " Hackerspace at ";
 
 //debug options
 boolean debug = false;
