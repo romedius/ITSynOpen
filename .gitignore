@@ -17,5 +17,6 @@
 *.app
 
 #other
-TSI_inout_ino/APIKey.h
+*APIKey.h
+*APIKey.php
 *~
