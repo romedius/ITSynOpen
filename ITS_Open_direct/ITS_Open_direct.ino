@@ -26,32 +26,14 @@ Example sketches from Arduino team, Ethernet by Adrian McEwen
 
 #include <SPI.h>
 #include <Ethernet.h>
-//#include <EthernetUdp.h>
 
 #include "APIKey.h"
 
-
-char ITSAddress[] = "it-syndikat.org";
-
 // Local Network Settings
-byte mac[] = { 0xD4, 0x28, 0xB2, 0xFF, 0xA0, 0xA1 }; // Must be unique on local network
+//byte mac[] = { 0xD4, 0x28, 0xB2, 0xFF, 0xA0, 0xA1 }; // Must be unique on local network
 
-unsigned int localPort = 8888;      // local port to listen for UDP packets
+byte mac[] = { 0xD4, 0xBE, 0xD9, 0x9A, 0x7C, 0x95 }; // Must be unique on local network
 
-// Variable Setup - check if these Variables are needed
-long lastConnectionTime = 0;
-boolean lastConnected = true;
-int failedCounter = 0;
-
-// NTP stuff
-//IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov NTP server
-IPAddress timeServer(193,170,62,252); // ana austrian one
-// IPAddress timeServer(132, 163, 4, 102); // time-b.timefreq.bldrdoc.gov NTP server
-// IPAddress timeServer(132, 163, 4, 103); // time-c.timefreq.bldrdoc.gov NTP server
-
-const int NTP_PACKET_SIZE= 48; // NTP time stamp is in the first 48 bytes of the message
-
-byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
 
 // Initialize Arduino Ethernet Client
 EthernetClient client;
@@ -59,23 +41,11 @@ EthernetClient client;
 // Twitter response variables
 char serverName[] = "it-syndikat.org";  // twitter URL
 String currentLine = "";            // string to hold the text from server
-String tweet = "";                  // string to hold the tweet
-boolean readingTweet = false;       // if you're currently reading the tweet
-
 
 // Specific variables
 // Status
 int hsopen =2;
 int ethernetstatus = -1;
-/*
-0=not set
-1=read thingspeak response
-2=read tweet
-*/
-int readStatus=0;
-
-// Twitter message, intermediate part
-String tmsg = " Hackerspace at ";
 
 //debug options
 boolean debug = true;
@@ -130,50 +100,22 @@ void setup()
 
 void loop()
 {
-  switch(readStatus){
-    case 0:{
-      readStatus = readButtons();
-      break;
-    }
-    case 1:{
-      readStatus = readServerReturn();
-      if(debug){
-        Serial.print("got it ... status: ");
-        Serial.println(readStatus);    
-      }
-      break;
-    }
-    case 2:{
-      readStatus = readServerStatus();
-      break;
-    }
-  }
-  
-  // Check if Arduino Ethernet needs to be restarted
-
-  lastConnected = client.connected();
+  readButtons();
 }
 
 
-int readButtons(){
+void readButtons(){
   int ret=0;
   if((digitalRead(topen)==LOW)&&(hsopen!=1)){
-    startEthernet();
+    //startEthernet();
     setRoom(2);
     TriggerServerUpdate(true);
-    hsopen=1;
-    ret=1;
-    setRoom(hsopen);
   }
   if((digitalRead(tclose)==LOW)&&(hsopen!=0)){
-    startEthernet();
+    //startEthernet();
     setRoom(2);
     TriggerServerUpdate(false);
-    hsopen=0;
-    ret=1;
-    setRoom(hsopen);
   }
-  return ret;
 }
 
 void startEthernet()
@@ -236,12 +178,14 @@ void TriggerServerReq() {
     // make HTTP GET request to server:
     client.println("GET /status-s.php HTTP/1.1");
     client.println("HOST: it-syndikat.org");
+    client.println("Connection: close");
     client.println();
+    readServerStatus();
+    //readServerReturn(); 
   }else{
     if(debug){Serial.println("Not connected...");}
   }
   // note the time of this connect attempt:
-  readStatus=2;
 }
 
 void TriggerServerUpdate(boolean stat) {
@@ -251,82 +195,82 @@ void TriggerServerUpdate(boolean stat) {
     if(debug){Serial.println("making HTTP request...");}
     // make HTTP GET request to server:
     String s =(stat?"true":"false");
-    client.println("GET /update.php?open=" + s + " HTTP/1.1");
+    client.println("GET /update.php?open=" + s + "&apikey="+serverAPIKey+" HTTP/1.1");
     client.println("HOST: it-syndikat.org");
+    client.println("Connection: close");
     client.println();
+    readServerStatus();    
   }else{
     if(debug){Serial.println("Not connected...");}
   }
   // note the time of this connect attempt:
-  readStatus=1;
 }
 
-//clean this mess up
-int readServerStatus() {  
-   if (client.connected()) {
+//reads out the status returned by the server and sets the LED's appropriately.
+int readServerStatus() {
+  char lastsign='0';
+  boolean readStatus = false;
+  while(client.connected()) {
     if (client.available()) {
       // read incoming bytes:
       char inChar = client.read();
 
       // add incoming byte to end of line:
       currentLine += inChar;
+      
+      if(debug){Serial.print(inChar);}
 
       // if you get a newline, clear the line:
       if (inChar == '\n') {
         currentLine = "";
+        if(lastsign == '\n'){ // /r/n /r/n is the end of a header
+          readStatus= true; //start to parse the content of the line
+          if(debug){Serial.println("##END OF HEADER##");}
+        }
       }
       
-      // if you're currently reading the bytes of a tweet,
-      // add them to the tweet String:
-      if (readingTweet) {
-        if (inChar != '<') {
-          tweet += inChar;
-        }
-        else {
-          // if you got a "<" character,
-          // you've reached the end of the tweet:
-          readingTweet = false;
-          if(debug){Serial.println("Message:");}  
-          if(debug){Serial.println(tweet);}
-          if(debug){Serial.println(tweet.startsWith("true", 0));}          
-          if(debug){Serial.println(tweet.startsWith("false", 0));}
-          if(tweet.startsWith("true", 0)){hsopen=1;}
-          else {if(tweet.startsWith("false", 0)){hsopen=0;}
-          else {hsopen=-1;}}  
+      if (readStatus) {
+        // if you got a "<" character,
+        // you've reached the end of the tweet:
+        if(currentLine.startsWith("true", 0)){
+          if(debug){Serial.println("");}
+          hsopen=1;
           setRoom(hsopen);
           // close the connection to the server:
           client.stop();
           return 0;
         }
+        if(currentLine.startsWith("false", 0)){
+          if(debug){Serial.println("");}
+          hsopen=0;
+          setRoom(hsopen);
+          // close the connection to the server:
+          client.stop();
+          return 0;
+        }                
       }
-      // if the current line ends with <text>, it will
-      // be followed by the tweet:
-      if ( currentLine.endsWith("<status>")) {
-        // tweet is beginning. Clear the tweet string:
-        readingTweet = true;
-        tweet = "";
-      }
-    }  
+      if (inChar != '\r') {// removes /r so we dan test if the header end with two newlines, hacky but works.
+        lastsign = inChar;
+      }      
+    }
   }
-  return 2;
+  hsopen=-1;
+  setRoom(hsopen);
+  client.stop();
 }
 
 
-//clean this mess up
-int readServerReturn() {  
+//This just reads the server return and logs it to the serial
+void readServerReturn() {  
   //if(debug){Serial.println("readServerReturn ... ");}
-   if (client.connected()) {
+   while(client.connected()) {
      if (client.available()) {
        char c = client.read();
-       Serial.print(c);
-       return 1;
+       if(debug){Serial.print(c);}
      }
-     return 1;
-   }else{
-     Serial.println();
-     Serial.println("disconnecting.");
-     client.stop();
-     return 0;
-  }
+   }
+   if(debug){Serial.println();}
+   if(debug){Serial.println("disconnecting.");}
+   client.stop();
 }
 
