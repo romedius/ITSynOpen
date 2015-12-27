@@ -2,4 +2,5 @@
 
 String thingtweetAPIKey = "myThingspeakKey";
 String serverAPIKey = "myserverAPIKey";
+String pingAPIKey ="pingApiKey";
 

@@ -68,7 +68,7 @@ void setup()
   delay(1000);
   
   // Get current Status
-  TriggerServerReq();
+  RequestState();
 }
 
 void loop()
@@ -118,8 +118,10 @@ void startEthernet()
     }
     setEth(1);
   }  
-      Serial.println("DONE");
-      Serial.println();
+  if(debug){
+    Serial.println("DONE");
+    Serial.println();
+  }
   delay(1000);
 }
 
@@ -187,19 +189,21 @@ void setRoom(int statuss){
   setLeds();
 }
 
+void RequestState() {
+  TriggerServerReq("/status-s.php",0);
+}
 
-void TriggerServerReq() {
+void TriggerServerReq(String s, int mode) {
   // attempt to connect, and wait a millisecond:
   if(debug){Serial.println("connecting to server... Status req");}
   if (client.connect(serverName, 80)) {
     if(debug){Serial.println("making HTTP request...");}
     // make HTTP GET request to server:
-    client.println("GET /status-s.php HTTP/1.1");
+    client.println("GET "+ s +" HTTP/1.1");
     client.println("HOST: it-syndikat.org");
     client.println("Connection: close");
     client.println();
-    readServerStatus();
-    //readServerReturn(); 
+    readServerStatus(mode);
   }else{
     if(debug){Serial.println("Not connected...");}
   }
@@ -217,7 +221,7 @@ void TriggerServerUpdate(boolean stat) {
     client.println("HOST: it-syndikat.org");
     client.println("Connection: close");
     client.println();
-    readServerStatus();    
+    readServerStatus(0);    
   }else{
     if(debug){Serial.println("Not connected...");}
   }
@@ -225,7 +229,8 @@ void TriggerServerUpdate(boolean stat) {
 }
 
 //reads out the status returned by the server and sets the LED's appropriately.
-int readServerStatus() {
+//the mode is defied by the intended call: 
+int readServerStatus(int mode) {
   char lastsign='0';
   boolean readStatus = false;
   while(client.connected()) {
@@ -248,18 +253,30 @@ int readServerStatus() {
       }
       
       if (readStatus) {
-        // if you got a "<" character,
-        // you've reached the end of the tweet:
         if(currentLine.startsWith("true", 0)){
           if(debug){Serial.println("");}
-          setRoom(1);
+          switch(mode){
+            case 0:
+               setRoom(1);
+               break;
+            case 1:
+               if(debug){Serial.println("Wink Wink");}
+               break;
+          }
           // close the connection to the server:
           client.stop();
           return 0;
         }
         if(currentLine.startsWith("false", 0)){
           if(debug){Serial.println("");}
-          setRoom(0);
+          switch(mode){
+            case 0:
+               setRoom(0);
+               break;
+            case 1:
+               if(debug){Serial.println("No Wink");}
+               break;
+          }
           // close the connection to the server:
           client.stop();
           return 0;
@@ -276,6 +293,7 @@ int readServerStatus() {
 
 
 //This just reads the server return and logs it to the serial
+// @deprecated
 void readServerReturn() {  
   //if(debug){Serial.println("readServerReturn ... ");}
    while(client.connected()) {
