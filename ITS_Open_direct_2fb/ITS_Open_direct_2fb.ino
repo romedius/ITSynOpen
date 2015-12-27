@@ -1,27 +1,15 @@
 /*
+IT-Syndikat Open device Firmware for the wooden Device with two fat buttons
 
-Arduino --> ThingTweet via Ethernet
-The ThingTweet sketch is designed for the Arduino + Ethernet Shield.
-This sketch updates a Twitter status via the ThingTweet App
-(http://community.thingspeak.com/documentation/apps/thingtweet/) using HTTP POST.
-ThingTweet is a Twitter proxy web application that handles the OAuth.
-Getting Started with ThingSpeak and ThingTweet:
-* Sign Up for a New User Account for ThingSpeak - https://www.thingspeak.com/users/new
-* Link your Twitter account to the ThingTweet App - Apps / ThingTweet
-* Enter the ThingTweet API Key in this sketch under "ThingSpeak Settings"
-Arduino Requirements:
-* Arduino with Ethernet Shield or Arduino Ethernet
-* Arduino 1.0 IDE
-* Twitter account linked to your ThingSpeak account
 Network Requirements:
 
 * Ethernet port on Router
 * DHCP enabled on Router
 * Unique MAC Address for Arduino
-Created: October 17, 2011 by Hans Scharler (http://www.iamshadowlord.com)
-Updated: December 7, 2012 by Hans Scharler (http://www.iamshadowlord.com)
+
 Additional Credits:
 Example sketches from Arduino team, Ethernet by Adrian McEwen
+Based on the Ethernet to Thingspeak exaple  by Hans Scharler
 */
 
 #include <SPI.h>
@@ -29,23 +17,20 @@ Example sketches from Arduino team, Ethernet by Adrian McEwen
 
 #include "APIKey.h"
 
-// Local Network Settings
-//byte mac[] = { 0xD4, 0x28, 0xB2, 0xFF, 0xA0, 0xA1 }; // Must be unique on local network
-
-byte mac[] = { 0xD4, 0xBE, 0xD9, 0x9A, 0x7C, 0x95 }; // Must be unique on local network
+byte mac[] = { 0xD4, 0xBA, 0xD9, 0x9A, 0x7C, 0x95 }; // Must be unique on local network
 
 
 // Initialize Arduino Ethernet Client
 EthernetClient client;
 
 // Twitter response variables
-char serverName[] = "it-syndikat.org";  // twitter URL
+char serverName[] = "it-syndikat.org";  // URL
 String currentLine = "";            // string to hold the text from server
 
 // Specific variables
 // Status
-int hsopen =2;
-int ethernetstatus = -1;
+int hsopen;
+int ethernetstatus;
 
 //debug options
 boolean debug = true;
@@ -53,19 +38,6 @@ boolean debug = true;
 //LED and Switch pins
 const int glight = 5;
 const int rlight = 6;
-
-/*
-const int ropen=5;
-const int rwait=6;
-const int rclosed=7;
-const int runknown=8;
-
-const int eok=A0;
-const int efail=A1;
-const int eunknown=A2;
-
-
-*/
 
 const int topen = 2;
 const int tclose = 3;
@@ -78,19 +50,7 @@ void setup()
   pinMode(glight, OUTPUT);      
   pinMode(rlight, OUTPUT);      
   
-  
-  /*
-  pinMode(ropen, OUTPUT);      
-  pinMode(rwait, OUTPUT);      
-  pinMode(rclosed, OUTPUT);      
-  pinMode(runknown, OUTPUT);      
-
-  pinMode(eok, OUTPUT);      
-  pinMode(efail, OUTPUT);      
-  pinMode(eunknown, OUTPUT); 
-  */
-
-  // Taster
+  // Buttons with pullup resistor
   pinMode(topen, INPUT);      
   pinMode(tclose, INPUT);      
   digitalWrite(topen,HIGH);
@@ -102,12 +62,12 @@ void setup()
   }
   // Start Ethernet on Arduino
   setEth(-1);
-  setRoom(hsopen); 
+  setRoom(2); 
   startEthernet();
 
   delay(1000);
   
-  // Update Twitter via ThingTweet
+  // Get current Status
   TriggerServerReq();
 }
 
@@ -166,11 +126,13 @@ void startEthernet()
 void setLeds(){
   switch(ethernetstatus){
     case 0:{ // ethernet fail
+      // should become blink red
       analogWrite(rlight, 63);
       analogWrite(glight, 0);
       break;
     }
     case -1:{ // ethernet unknown 
+      // should become fade green
       analogWrite(rlight, 0);
       analogWrite(glight, 63);      
       break;
@@ -188,11 +150,13 @@ void setLeds(){
           break;
         }
         case 2:{ // wait
+          // should become fade red and green
           analogWrite(rlight, 127);
           analogWrite(glight, 127);
           break;
         }
         case -1:{ // unknown 
+          // should become fade red
           analogWrite(rlight, 63);
           analogWrite(glight, 63);      
           break;
@@ -212,25 +176,15 @@ void setEth(int statuss){
     Serial.println(statuss);
   }
   setLeds();
-  /*
-  digitalWrite(eok,((statuss==1)?HIGH:LOW));
-  digitalWrite(efail,((statuss==0)?HIGH:LOW));
-  digitalWrite(eunknown,((statuss==-1)?HIGH:LOW));
-  */
 }
 
 void setRoom(int statuss){
+  hsopen= statuss;
   if(debug){
     Serial.print("Setting room ");
     Serial.println(statuss);
   }
   setLeds();
-  /*
-  digitalWrite(ropen,((statuss==1)?HIGH:LOW));
-  digitalWrite(rwait,((statuss==2)?HIGH:LOW));
-  digitalWrite(rclosed,((statuss==0)?HIGH:LOW));
-  digitalWrite(runknown,((statuss==-1)?HIGH:LOW));
-  */
 }
 
 
@@ -298,16 +252,14 @@ int readServerStatus() {
         // you've reached the end of the tweet:
         if(currentLine.startsWith("true", 0)){
           if(debug){Serial.println("");}
-          hsopen=1;
-          setRoom(hsopen);
+          setRoom(1);
           // close the connection to the server:
           client.stop();
           return 0;
         }
         if(currentLine.startsWith("false", 0)){
           if(debug){Serial.println("");}
-          hsopen=0;
-          setRoom(hsopen);
+          setRoom(0);
           // close the connection to the server:
           client.stop();
           return 0;
@@ -318,8 +270,7 @@ int readServerStatus() {
       }      
     }
   }
-  hsopen=-1;
-  setRoom(hsopen);
+  setRoom(-1);
   client.stop();
 }
 
