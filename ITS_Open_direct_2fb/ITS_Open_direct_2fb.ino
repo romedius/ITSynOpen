@@ -16,6 +16,7 @@ Based on the Ethernet to Thingspeak exaple  by Hans Scharler
 #include <Ethernet.h>
 
 #include "APIKey.h"
+#include "TimerOne.h"
 
 byte mac[] = { 0xD4, 0xBA, 0xD9, 0x9A, 0x7C, 0x95 }; // Must be unique on local network
 
@@ -31,6 +32,17 @@ String currentLine = "";            // string to hold the text from server
 // Status
 int hsopen;
 int ethernetstatus;
+
+int ledtimer =0;
+const int ledspan =20;
+
+int pingtimer =-1;
+const int pingspan =50;
+
+int checktimer = 0;
+const int checkspan =200;
+
+int update = 0;
 
 //debug options
 boolean debug = true;
@@ -63,6 +75,10 @@ void setup()
   // Start Ethernet on Arduino
   setEth(-1);
   setRoom(2); 
+  
+  Timer1.initialize(100000); // 10 mal die Sekunde
+  Timer1.attachInterrupt(setLeds);
+  
   startEthernet();
 
   delay(1000);
@@ -74,6 +90,7 @@ void setup()
 void loop()
 {
   readButtons();
+  launchUpdate();
 }
 
 
@@ -88,6 +105,13 @@ void readButtons(){
     //startEthernet();
     setRoom(2);
     TriggerServerUpdate(false);
+  }
+}
+
+void launchUpdate(){
+  if(update==1){
+    RequestPing();
+    update = 0;
   }
 }
 
@@ -126,49 +150,91 @@ void startEthernet()
 }
 
 void setLeds(){
-  switch(ethernetstatus){
-    case 0:{ // ethernet fail
-      // should become blink red
-      analogWrite(rlight, 63);
-      analogWrite(glight, 0);
-      break;
-    }
-    case -1:{ // ethernet unknown 
-      // should become fade green
+  if (pingtimer>=0)
+  {
+    // blink like crazy
+    if((pingtimer/2)%2 ==1){
+      analogWrite(rlight, 255);
+      analogWrite(glight, 255);
+    }else{
       analogWrite(rlight, 0);
-      analogWrite(glight, 63);      
-      break;
+      analogWrite(glight, 0);
     }
-    case 1:{ // ethernet ok
-      switch(hsopen){
-        case 0:{ // closed
+    pingtimer--;
+  }else{
+    switch(ethernetstatus){
+      case 0:{ // ethernet fail
+        //blink red
+        if(ledtimer < (ledspan/2)){
           analogWrite(rlight, 255);
-          analogWrite(glight, 0);
-          break;
-        }
-        case 1:{ // open
+        }else{
           analogWrite(rlight, 0);
-          analogWrite(glight, 255);
-          break;
         }
-        case 2:{ // wait
-          // should become fade red and green
-          analogWrite(rlight, 127);
-          analogWrite(glight, 127);
-          break;
-        }
-        case -1:{ // unknown 
-          // should become fade red
-          analogWrite(rlight, 63);
-          analogWrite(glight, 63);      
-          break;
-        }
-      }      
-      break;
+        analogWrite(glight, 0);
+        break;
+      }
+      case -1:{ // ethernet unknown
+        // fade green
+        if(ledtimer < (ledspan/2)){
+          analogWrite(glight, (255/(ledspan/2)*ledtimer));//fade up
+        }else{
+          analogWrite(glight, 255-(255/(ledspan/2)*(ledtimer-(ledspan/2))));//fade down
+        }    
+        analogWrite(rlight, 0);
+        break;
+      }
+      case 1:{ // ethernet ok
+        switch(hsopen){
+          case 0:{ // closed
+            //red
+            analogWrite(rlight, 255);
+            analogWrite(glight, 0);
+            break;
+          }
+          case 1:{ // open
+            // green
+            analogWrite(rlight, 0);
+            analogWrite(glight, 255);
+            break;
+          }
+          case 2:{ // wait
+            // fade red and green
+            if(ledtimer < (ledspan/2)){
+              int tmp=(255/(ledspan/2)*ledtimer); 
+              analogWrite(glight, tmp);//fade up
+              analogWrite(rlight, tmp);//fade up
+              
+            }else{
+              int tmp = 255-(255/(ledspan/2)*(ledtimer-(ledspan/2)));
+              analogWrite(glight, tmp);//fade down
+              analogWrite(rlight, tmp);//fade down
+            }
+            break;
+          }
+          case -1:{ // unknown 
+            // fade red
+            if(ledtimer < (ledspan/2)){
+              analogWrite(rlight, (255/(ledspan/2)*ledtimer));//fade up
+            }else{
+              analogWrite(rlight, 255-(255/(ledspan/2)*(ledtimer-(ledspan/2))));//fade down
+            }    
+            analogWrite(glight, 0);      
+            break;
+          }
+        }      
+        break;
+      }
+    }
+    ledtimer++;
+    if ( ledtimer >= ledspan ) {
+      ledtimer = 0;
     }
   }
-  
-  
+    checktimer++;
+    if ( checktimer >= checkspan ) {
+      checktimer = 0;
+      update=1;
+    }  
 }
 
 void setEth(int statuss){
@@ -189,8 +255,14 @@ void setRoom(int statuss){
   setLeds();
 }
 
+
 void RequestState() {
   TriggerServerReq("/status-s.php",0);
+}
+
+
+void RequestPing() {
+  TriggerServerReq("/ping-get.php?apikey="+pingAPIKey,1);
 }
 
 void TriggerServerReq(String s, int mode) {
@@ -261,6 +333,7 @@ int readServerStatus(int mode) {
                break;
             case 1:
                if(debug){Serial.println("Wink Wink");}
+               pingtimer = pingspan;
                break;
           }
           // close the connection to the server:
