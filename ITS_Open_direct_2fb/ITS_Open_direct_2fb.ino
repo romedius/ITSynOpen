@@ -34,13 +34,13 @@ int hsopen;
 int ethernetstatus;
 
 int ledtimer =0;
-const int ledspan =20;
+const int ledspan =100;
 
 int pingtimer =-1;
-const int pingspan =50;
+const int pingspan =250;
 
 int checktimer = 0;
-const int checkspan =200;
+const int checkspan =1000;
 
 int update = 0;
 
@@ -76,7 +76,7 @@ void setup()
   setEth(-1);
   setRoom(2); 
   
-  Timer1.initialize(100000); // 10 mal die Sekunde
+  Timer1.initialize(20000); // 50 mal die Sekunde
   Timer1.attachInterrupt(setLeds);
   
   startEthernet();
@@ -111,6 +111,7 @@ void readButtons(){
 void launchUpdate(){
   if(update==1){
     RequestPing();
+    RequestState();
     update = 0;
   }
 }
