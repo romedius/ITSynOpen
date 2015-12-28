@@ -1,16 +1,17 @@
 ITSynOpen
 =========
 
-A custom Arduino device with Ethernet Shield.
-* The Twitter version writes the status via Thingspeak to twitter.
-* The direct version wtites the updates to your server, which provides SpaceAPI data.
+This is the Arduino firmaware for the IT-Syndikat Isitopen device
+
+In this Repository you find three versions
+* one with Twitter bindings using simple push buttons
+* one designed to send data directly to the server using simple push buttons
+* one designed to send data directly to the server using two fat red and green buttons (currently in use)
 
 Recommended partlist:
 ---------------------
 
 * Arduino compatible with Ethernet shield (or compatible)
-* LED's for ethernet + resistors: red green and yellow
-* Status LED's: red, yellow, green + blue for unknown 
-* 2 push buttons as input
-
-* A prototype shield
+* two big pushbuttons with integrated LEDs
+* box
+* prototype shield
