@@ -258,12 +258,12 @@ void setRoom(int statuss){
 
 
 void RequestState() {
-  TriggerServerReq("/status-s.php",0);
+  TriggerServerReq("/api/status-s.php",0);
 }
 
 
 void RequestPing() {
-  TriggerServerReq("/ping-get.php?apikey="+pingAPIKey,1);
+  TriggerServerReq("/api/ping-get.php?apikey="+pingAPIKey,1);
 }
 
 void TriggerServerReq(String s, int mode) {
@@ -290,7 +290,7 @@ void TriggerServerUpdate(boolean stat) {
     if(debug){Serial.println("making HTTP request...");}
     // make HTTP GET request to server:
     String s =(stat?"true":"false");
-    client.println("GET /update.php?open=" + s + "&apikey="+serverAPIKey+" HTTP/1.1");
+    client.println("GET /api/update.php?open=" + s + "&apikey="+serverAPIKey+" HTTP/1.1");
     client.println("HOST: it-syndikat.org");
     client.println("Connection: close");
     client.println();
