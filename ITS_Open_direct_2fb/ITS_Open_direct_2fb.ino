@@ -54,6 +54,8 @@ const int rlight = 6;
 const int topen = 2;
 const int tclose = 3;
 
+const int beeper = A5;
+
 // Status LED pins
 
 void setup()
@@ -61,6 +63,8 @@ void setup()
   
   pinMode(glight, OUTPUT);      
   pinMode(rlight, OUTPUT);      
+  pinMode(beeper, OUTPUT);     
+  digitalWrite(beeper,LOW);   
   
   // Buttons with pullup resistor
   pinMode(topen, INPUT);      
@@ -153,6 +157,23 @@ void startEthernet()
 void setLeds(){
   if (pingtimer>=0)
   {
+    if(hsopen){ // If space is not closed, beep three times with
+      //beep
+      if((pingtimer> 220)&&((pingtimer/5)%2 ==1)){
+        digitalWrite(beeper, HIGH);
+      }else{
+        digitalWrite(beeper, LOW);
+      }
+    
+    }else{ // if closed, beep once
+      //beep
+      if((pingtimer> 240)&&((pingtimer/5)%2 ==1)){
+        digitalWrite(beeper, HIGH);
+      }else{
+        digitalWrite(beeper, LOW);
+      }
+    }
+    
     // blink like crazy
     if((pingtimer/2)%2 ==1){
       analogWrite(rlight, 255);
